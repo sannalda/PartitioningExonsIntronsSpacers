@@ -18,12 +18,10 @@ workdir = ""
 sample = "Test"
 
 trna = False # Set False if want to remove tRNA from introns and exons  
+rrna = False # Set False if want to remove rRNA from introns and exons
 
+            
 ##### Exons and Introns
-
-count = 0
-exons = []
-introns = []
 
 def GenBankProperSortingFormat(feature):
     # Define the sorting order: gene first, then CDS
@@ -37,6 +35,20 @@ def GenBankProperSortingFormat(feature):
         return (feature.location.start,3)
     else:
         return (feature.location.start,4)
+    
+def FastaProperSortingFormat(feature):
+    if ("<" in feature.name or ">" in feature.name):
+        feature.name = feature.name.replace("<","")
+        feature.name = feature.name.replace(">","")
+    return int(feature.name)
+    
+features_to_select = ["CDS"]
+if (trna): features_to_select += ["tRNA"]
+if (rrna): feature_to_select += ["rRNA"]
+    
+count = 0
+exons = []
+introns = []
 
 input_gb.features = sorted(input_gb.features, key=GenBankProperSortingFormat)
 
@@ -48,7 +60,6 @@ for feature_num in range(len(input_gb.features)):
     elif ((feature_curr.type == "gene") and ("pseudo" not in feature_curr.qualifiers)):
         feature = input_gb.features[feature_num+1]
         
-        features_to_select = ["CDS","tRNA"] if (trna) else ["CDS"]
         if (feature.type in features_to_select):
             try:
                 gene_curr = feature.qualifiers["gene"][0]
@@ -67,8 +78,8 @@ for feature_num in range(len(input_gb.features)):
                     record = SeqRecord(
                         feature_loc_1.extract(input_seq).seq + feature_loc_2.extract(input_seq).seq,
                         id="%s" %gene_curr,
-                        name="Exon",
-                        description="Exon %d-%d %s" %(exon_prev.start,exon_curr.end,sample)
+                        name=str(exon_curr.start),
+                        description="Exon %d-%d %s" %(exon_prev.start,exon_curr.end,sample),
                     )
                     exons.append(record)
                 else:
@@ -80,8 +91,8 @@ for feature_num in range(len(input_gb.features)):
                         record = SeqRecord(
                             feature_loc.extract(input_seq).seq,
                             id="%s" %gene_curr,
-                            name="Exon",
-                            description="Exon %d-%d %s" %(exon_curr.start,exon_curr.end,sample)
+                            name=str(exon_curr.start),
+                            description="Exon %d-%d %s" %(exon_curr.start,exon_curr.end,sample),
                         )
                         exons.append(record) 
 
@@ -93,34 +104,28 @@ for feature_num in range(len(input_gb.features)):
                             record = SeqRecord(
                                 feature_loc.extract(input_seq).seq,
                                 id="%s" %gene_curr,
-                                name="Intron",
-                                description="Intron %d-%d %s" %(exon_prev.end,exon_curr.start,sample)
+                                name=str(exon_curr.start),
+                                description="Intron %d-%d %s" %(exon_prev.end,exon_curr.start,sample),
                             )
                         else:
                             feature_loc = FeatureLocation(exon_curr.end,exon_prev.start,strand=exon_curr.strand)
                             record = SeqRecord(
                                 feature_loc.extract(input_seq).seq,
                                 id="%s" %gene_curr,
-                                name="Intron",
-                                description="Intron %d-%d %s" %(exon_curr.end,exon_prev.start,sample)
+                                name=str(exon_curr.end),
+                                description="Intron %d-%d %s" %(exon_curr.end,exon_prev.start,sample),
                             )
                         introns.append(record) 
 
                     exon_prev = exon_curr
-        else:
-            record = SeqRecord(
-                feature_curr.extract(input_seq).seq,
-                id="%s" %gene_curr,
-                name="Exon",
-                description="Exon %d-%d %s" %(feature_curr.location.start,feature_curr.location.end,sample)
-            )
-            exons.append(record)
-                
+
+exons = sorted(exons, key=FastaProperSortingFormat)
 exons_seq = os.path.join(workdir,'%s_Exons.fasta' %sample) 
 with open(exons_seq, "w+") as result_file:
     for record in exons:
         SeqIO.write(record, result_file, "fasta")
 
+introns = sorted(introns, key=FastaProperSortingFormat)
 introns_seq = os.path.join(workdir,'%s_Introns.fasta' %sample)
 with open(introns_seq, "w+") as result_file:
     for record in introns:
@@ -175,7 +180,7 @@ for feature in input_gb.features:
             record = SeqRecord(
                 feature_loc.extract(input_seq).seq,
                 id="%s+++%s" %(gene_prev.replace(" ",""),gene_curr.replace(" ","")),
-                name="Spacer",
+                name=str(gene_prev_end),
                 description="Spacer %d-%d %s" %(gene_prev_end,gene_curr_start,sample)
             )
             spacers.append(record)
@@ -188,8 +193,8 @@ for feature in input_gb.features:
             gene_prev_end = gene_curr_end
             gene_prev = gene_curr
 
+spacers = sorted(spacers, key=FastaProperSortingFormat)
 spacers_seq = os.path.join(workdir,'%s_Spacers.fasta' %sample) 
 with open(spacers_seq, "w+") as result_file:
     for record in spacers:
         SeqIO.write(record, result_file, "fasta")
-        
